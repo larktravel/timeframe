@@ -4,12 +4,16 @@
  * Freely distributable under the terms of an MIT-style license.
  * ------------------------------------------------------------- */
 
+function isCultureInfoAvailable() {
+  return typeof Date.CultureInfo !== 'undefined';
+}
+
 // Checks for localized Datejs before defaulting to 'en-US'
 var Locale = {
-	format:     (typeof Date.CultureInfo == 'undefined' ? '%b %d, %Y' : Date.CultureInfo.formatPatterns.shortDate),
-	monthNames: (typeof Date.CultureInfo == 'undefined' ? $(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']) : Date.CultureInfo.monthNames),
-	dayNames:   (typeof Date.CultureInfo == 'undefined' ? $(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) : Date.CultureInfo.dayNames),
-	weekOffset: (typeof Date.CultureInfo == 'undefined' ? 0 : Date.CultureInfo.firstDayOfWeek)
+    format:     (!isCultureInfoAvailable() ? '%b %d, %Y' : Date.CultureInfo.formatPatterns.shortDate),
+    monthNames: (!isCultureInfoAvailable() ? $(['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']) : Date.CultureInfo.monthNames),
+    dayNames:   (!isCultureInfoAvailable() ? $(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']) : Date.CultureInfo.dayNames),
+    weekOffset: (!isCultureInfoAvailable() ? 0 : Date.CultureInfo.firstDayOfWeek)
 };
 
 var Timeframes = [];
@@ -264,6 +268,16 @@ function Timeframe() {
 //    }
 		return me;
 	};
+	
+    function formatRange(range) {
+        if (!range) return '';
+
+        return isCultureInfoAvailable() ? range.toString(me.format) : range.strftime(me.format);
+    }
+
+    function fieldHasError(field, initValue) {
+        return !!field.hasFocus && field.val() === '' && initValue !== '';
+    }
 
 	// Fields
 
@@ -303,19 +317,16 @@ function Timeframe() {
 	};
 
 	this.refreshField = function(fieldName) {
-		var field = me.fields[fieldName];
-		var initValue = field.val();
+        var field = me.fields[fieldName],
+            range = me.range[fieldName],
+            initValue = field.val(),
+            formated = formatRange(range);
 
-		if (me.range[fieldName]) {
-			field.val(typeof Date.CultureInfo == 'undefined' ?
-				me.range[fieldName].strftime(me.format) :
-				me.range[fieldName].toString(me.format));
-		} else {
-			field.val('');
-		}
+        field.val(formated);
+        field.toggleClass('error', fieldHasError(field, initValue));
+        field.hasFocus = false;
 
-		field.hasFocus && field.val() == '' && initValue != '' ? field.addClass('error') : field.removeClass('error');
-		field.hasFocus = false;
+        $(field).trigger('timeframe.didRefreshField', [fieldName, range, formated]);
 
 		return me;
 	};
