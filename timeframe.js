@@ -1,3 +1,6 @@
+'use strict';
+/*global $:false, jQuery:false */
+
 /* Timeframe, version 0.3.1
  * (c) 2008-2011 Stephen Celis
  * (c) 2012 Kyle Konrad
@@ -22,48 +25,60 @@ function Timeframe() {
 	var me = this;
 	var Version = '0.3';
 
+	var startFieldId
+	var endFieldId
+
 	this.initialize = function(element, options) {
 		Timeframes.push(me);
 
-		me.element = $(element);
-		me.element.addClass('timeframe_calendar');
 		me.options = options || {};
 		if (typeof me.options.months === 'undefined') {
 			me.options.months = 2;
 		}
-		me.months = me.options['months'];
+		me.months       = me.options.months;
+		me.weekdayNames = Locale.dayNames;
+		me.monthNames   = Locale.monthNames;
+		me.format       = me.options.format     || Locale.format;
+		me.weekOffset   = me.options.weekOffset || Locale.weekOffset;
+		me.maxRange     = me.options.maxRange;
+		me.minRange     = me.options.minRange;
+		me.cssClass 		= me.options.cssClass || 'timeframe_calendar';
 
-		me.weekdayNames = Locale['dayNames'];
-		me.monthNames   = Locale['monthNames'];
-		me.format       = me.options['format']     || Locale['format'];
-		me.weekOffset   = me.options['weekOffset'] || Locale['weekOffset'];
-		me.maxRange = me.options['maxRange'];
-		me.minRange = me.options['minRange'];
+		me.element = $(element);
+		me.element.addClass(me.cssClass);
 
-		me.firstDayId = me.element.attr('id') + '_firstday';
-		me.lastDayId = me.element.attr('id') + '_lastday';
+		me.firstDayId   = me.element.attr('id') + '_firstday';
+		me.lastDayId    = me.element.attr('id') + '_lastday';
 
 		me.scrollerDelay = 0.5;
 
 		me.buttons = {
-			previous: { label: '&larr;', element: me.options['previousButton'] },
-			today:    { label: 'T',      element: me.options['todayButton'] },
-			reset:    { label: 'R',      element: me.options['resetButton'] },
-			next:     { label: '&rarr;', element: me.options['nextButton'] }
+			previous: { label: '&larr;', element: me.options.previousButton },
+			today:    { label: 'T',      element: me.options.todayButton },
+			reset:    { label: 'R',      element: me.options.resetButton },
+			next:     { label: '&rarr;', element: me.options.nextButton }
 		};
-		me.fields = { start: me.options['startField'], end: me.options['endField'] };
+		me.fields = { start: me.options.startField, end: me.options.endField };
 
-		me.range = {};
+		// TODO: Clean this up and bring it better into the scope of the object
+		startFieldId = me.fields.start.attr('id').toString();
+		endFieldId   = me.fields.end.attr('id').toString();
+
+		//me.range = {};
+		me.cbkRangeSelected = options.rangeSelected;
+		me.range = me.options.range;
 		me.earliest = (typeof me.options.earliest === 'object' ? me.options.earliest : Date.parseToObject(me.options.earliest));
 		me.latest = (typeof me.options.latest === 'object' ? me.options.latest : Date.parseToObject(me.options.latest));
 		if (me.earliest && me.latest && me.earliest > me.latest) {
-			throw new Error("Timeframe: 'earliest' cannot come later than 'latest'");
+			throw new Error('Timeframe: \'earliest\' cannot come later than \'latest\'');
 		}
 
 		me._buildButtons()._buildFields();
 
 		me.calendars = [];
-		me.element.append($('<div>').attr('id', me.element.attr('id') + '_container'));
+		me.element.append($('<div>').attr('id', me.element.attr('id') + '_container').addClass('months-container'));
+		// me.element.append($('<div>').attr('startDate', new Date()));
+		// me.element.append($('<div>').attr('endDate', new Date()));
 		var months = me.months;
 		for (var month = 0 ; month < months ; ++month) {
 			me.createCalendar(month);
@@ -79,12 +94,16 @@ function Timeframe() {
 
 	this.createCalendar = function() {
 		var calendar = $('<table>', {
-			id: me.element.attr('id') + '_calendar_' + me.calendars.length, border: 0, cellspacing: 0, cellpadding: 5
+			id: me.element.attr('id') + '_calendar_' + me.calendars.length,
+      border: 0,
+      cellspacing: 0,
+      cellpadding: 0
 		});
 		calendar.append($('<caption>'));
 
 		var head = $('<thead>');
 		var row  = $('<tr>');
+
 		for (var column = 0 ; column < me.weekdayNames.length ; ++column) {
 			var weekday = me.weekdayNames[(column + me.weekOffset) % 7];
 			var cell = $('<th>', { scope: 'col', abbr: weekday }).text(weekday.substring(0,1));
@@ -95,10 +114,10 @@ function Timeframe() {
 
 		var body = $('<tbody>');
 		for (var rowNumber = 0 ; rowNumber < 6 ; ++rowNumber) {
-			var row = $('<tr>');
-			for (var column = 0 ; column < me.weekdayNames.length ; ++column) {
-				var cell = $('<td>');
-				row.append(cell);
+      row = $('<tr>');
+			for (column = 0 ; column < me.weekdayNames.length ; ++column) {
+        // cell = $('<td>');
+        row.append($('<td>'));
 			}
 			body.append(row);
 		}
@@ -121,10 +140,12 @@ function Timeframe() {
 		var month = me.date.neutral();
 		month.setDate(1);
 
+		// me.date.setMonth(moment(me.range.start).toDate().getMonth());
+
 		if (me.earliest === null || me.earliest < month) {
-			me.buttons['previous']['element'].removeClass('disabled');
+			me.buttons.previous.element.removeClass('disabled');
 		} else {
-			me.buttons['previous']['element'].addClass('disabled');
+			me.buttons.previous.element.addClass('disabled');
 		}
 
 		$.each(me.calendars, function(i, calendar) {
@@ -161,7 +182,7 @@ function Timeframe() {
 				$day.attr('baseClass', $day.attr('class'));
 
 				iterator.setDate(iterator.getDate() + 1);
-				if (iterator.getDate() == 1) {
+				if (iterator.getDate() === 1) {
 					inactive = inactive ? false : 'post beyond';
 				}
 			});
@@ -170,25 +191,25 @@ function Timeframe() {
 		});
 
 		if (me.latest === null || me.latest > month) {
-			me.buttons['next']['element'].removeClass('disabled');
+			me.buttons.next.element.removeClass('disabled');
 		} else {
-			me.buttons['next']['element'].addClass('disabled');
+			me.buttons.next.element.addClass('disabled');
 		}
 
 		return me;
 	};
 
 	this._buildButtons = function() {
-		var buttonList = $('<ul>', { id: me.element.attr('id') + '_menu', class: 'timeframe_menu' });
+		var buttonList = $('<ul>', { id: me.element.attr('id') + '_menu', class: 'calendar-navigation clearfix' });
 
 		$.each(me.buttons, function(key, value) {
-			if (value['element']) {
-				value['element'].addClass('timeframe_button').addClass(key);
+			if (value.element) {
+				value.element.addClass('calendar-navigate').addClass(key);
 			} else {
 				var item = $('<li>');
-				var button = $('<a>', { class: 'timeframe_button ' + key, href: '#', onclick: 'return false;' }).append(value['label']);
+				var button = $('<a>', { class: 'calendar-navigate ' + key, href: '#', onclick: 'return false;' }).append(value.label);
 				button.onclick = function() { return false; };
-				value['element'] = button;
+				value.element = button;
 				item.append(button);
 				buttonList.append(item);
 			}
@@ -198,29 +219,29 @@ function Timeframe() {
 			me.element.append(buttonList);
 		}
 
-		me.clearButton = $('<span>', { class: 'clear' }).append($('<span>').append('X'));
+		me.clearButton = $('<span>', { class: 'clear' }).append($('<span>').append('+'));
 		return me;
 	};
 
 	this._buildFields = function() {
 		var fieldset = $('<div>', { id: me.element.attr('id') + '_fields', class: 'timeframe_fields' });
 
-		$.each(me.fields, function(key, value) {
-			if (value)
-				value.addClass('timeframe_field').addClass(key);
-			else {
-				var container = $('<div>', { id: key + me.element.attr('id') + '_field_container' });
-				me.fields[key] = $('<input>', { id: me.element.attr('id') + '_' + key + 'field', name: key + 'field', type: 'text', value: '' });
-				container.append($('<label>', { 'for': key + 'field' }).append(key));
-				container.append(me.fields[key]);
-				fieldset.append(container);
-			}
-		});
+		// $.each(me.fields, function(key, value) {
+		// 	if (value){
+		// 		value.addClass('timeframe_field').addClass(key);
+		// 	} else {
+		// 		var container = $('<div>', { id: key + me.element.attr('id') + '_field_container' });
+		// 		me.fields[key] = $('<input>', { id: me.element.attr('id') + '_' + key + 'field', name: key + 'field', type: 'text', value: '' });
+		// 		container.append($('<label>', { 'for': key + 'field' }).append(key));
+		// 		container.append(me.fields[key]);
+		// 		fieldset.append(container);
+		// 	}
+		// });
 
 		if (fieldset.children().length > 0) {
 			me.element.append(fieldset);
 		}
-		me.parseField('start').refreshField('start').parseField('end').refreshField('end').initDate = new Date(me.date);
+		me.parseField(startFieldId).refreshField(startFieldId).parseField(endFieldId).refreshField(endFieldId).initDate = new Date(me.date);
 
 		return me;
 	};
@@ -237,7 +258,7 @@ function Timeframe() {
 		$(document).unload(me.unregister);
 
 		// mousemove listener for Opera in _disableTextSelection
-		return me._registerFieldObserver('start')._registerFieldObserver('end')._disableTextSelection();
+		return me._registerFieldObserver(startFieldId)._registerFieldObserver(endFieldId)._disableTextSelection();
 	};
 
 	this.unregister = function() {
@@ -245,6 +266,12 @@ function Timeframe() {
 	};
 
 	this._registerFieldObserver = function(fieldName) {
+		if (fieldName == me.fields.start.attr('id')){
+			fieldName = 'start'
+		}
+		if (fieldName == me.fields.end.attr('id')){
+			fieldName = 'end'
+		}
 		var field = me.fields[fieldName];
 		field.focus(function() { field.hasFocus = true; me.parseField(fieldName, true); });
 		field.blur(function() { me.refreshField(fieldName); });
@@ -253,47 +280,41 @@ function Timeframe() {
 	};
 
 	this._disableTextSelection = function() {
-		/*
-		 if (Prototype.Browser.IE) {
-		 me.element.onselectstart = function(event) {
-		 if (!/input|textarea/i.test(Event.element(event).tagName)) return false;
-		 };
-		 } else if (Prototype.Browser.Opera)
-		 document.observe('mousemove', me.handleMouseMove);
-		 else {
-		 */
 		me.element.onmousedown = function(event) {
-			if (!/input|textarea/i.test(Event.element(event).tagName)) return false;
+      // if (!/input|textarea/i.test(Event.element(event).tagName)){ return false; }
+      if (!/input|textarea/i.test(event.element(event).tagName)){ return false; }
 		};
-//    }
 		return me;
 	};
-	
-    function formatRange(range) {
-        if (!range) return '';
-
-        return isCultureInfoAvailable() ? range.toString(me.format) : range.strftime(me.format);
-    }
-
-    function fieldHasError(field, initValue) {
-        return !!field.hasFocus && field.val() === '' && initValue !== '';
-    }
 
 	// Fields
 
 	this.parseField = function(fieldName, populate) {
+		if (fieldName == me.fields.start.attr('id')){
+			fieldName = 'start'
+		}
+		if (fieldName == me.fields.end.attr('id')){
+			fieldName = 'end'
+		}
+
 		var field = me.fields[fieldName];
 		var date = Date.parseToObject(me.fields[fieldName].val());
 		var failure = me.validateField(fieldName, date);
 
-		if (failure != 'hard') {
-			me.range[fieldName] = date;
-			field.removeClass('error');
+		if (failure !== 'hard') {
+			if(me.options.range !== undefined)
+			{
+				me.range[fieldName] = me.options.range[fieldName];
+				field.removeClass('error');
+			} else {
+				me.range[fieldName] = date;
+				field.removeClass('error');
+			}
 		} else if (field.hasFocus) {
 			field.addClass('error');
 		}
 
-		var date = Date.parseToObject(me.range[fieldName]);
+		date = Date.parseToObject(me.range[fieldName]);
 		me.date = date || new Date();
 
 		if (me.earliest && me.earliest > me.date) {
@@ -317,31 +338,45 @@ function Timeframe() {
 	};
 
 	this.refreshField = function(fieldName) {
-        var field = me.fields[fieldName],
-            range = me.range[fieldName],
-            initValue = field.val(),
-            formated = formatRange(range);
 
-        field.val(formated);
-        field.toggleClass('error', fieldHasError(field, initValue));
-        field.hasFocus = false;
+		if (fieldName == me.fields.start.attr('id')){
+			fieldName = 'start'
+		}
+		if (fieldName == me.fields.end.attr('id')){
+			fieldName = 'end'
+		}
 
-        $(field).trigger('timeframe.didRefreshField', [fieldName, range, formated]);
+		var field = me.fields[fieldName];
+		var initValue = field.val();
+
+		if (me.range[fieldName]) {
+			field.val(moment(me.range[fieldName]).format(me.format));
+		} else {
+			field.val('');
+		}
+
+		if (field.hasFocus && (field.val() === '') && (initValue !== '')){
+      field.addClass('error');
+    } else {
+      field.removeClass('error');
+    }
+
+		field.hasFocus = false;
 
 		return me;
 	};
 
 	this.validateField = function(fieldName, date) {
-		if (!date) return '';
+		if (!date) {return '';}
 
 		var error;
 		if ((me.earliest && date < me.earliest) || (me.latest && date > me.latest)){
 			error = 'hard';
 
-		} else if (fieldName == 'start' && me.range['end'] && date > me.range['end']){
+		} else if (fieldName === startFieldId && me.range.end && date > me.range.end){
 			error = 'soft';
 
-		} else if (fieldName == 'end' && me.range['start'] && date < me.range['start']) {
+		} else if (fieldName === endFieldId && me.range.start && date < me.range.start) {
 			error = 'soft';
 		}
 
@@ -352,13 +387,14 @@ function Timeframe() {
 
 	this.eventClick = function(event) {
 		var el;
-		if (el = $(event.target).closest('a.timeframe_button')) {
+    if (el = $(event.target).closest('a.calendar-navigate')) {
 			me.handleButtonClick(event, el);
 		}
 	};
 
 	this.eventMouseDown = function(event) {
 		var el, em;
+    // check to see if selected action is to clear
 		el = $(event.target).closest('span.clear');
 		if (el.length) {
 			el.find('span').addClass('active');
@@ -375,34 +411,34 @@ function Timeframe() {
 		return false;
 	};
 
-	this.handleButtonClick = function(event, element) {
-		var movement = me.months > 1 ? me.months - 1 : 1;
+  this.handleButtonClick = function(event, element) {
+    var movement = me.months > 1 ? me.months - 1 : 1;
 
-		if (element.hasClass('next')) {
-			if (!me.buttons['next']['element'].hasClass('disabled')) {
-				me.date.setMonth(me.date.getMonth() + movement);
-			}
+    if (element.hasClass('next')) {
+      if (!me.buttons.next.element.hasClass('disabled')) {
+        me.date.setMonth(me.date.getMonth() + movement);
+      }
 
-		} else if (element.hasClass('previous')) {
-			if (!me.buttons['previous']['element'].hasClass('disabled')) {
-				me.date.setMonth(me.date.getMonth() - movement);
-			}
+    } else if (element.hasClass('previous')) {
+      if (!me.buttons.previous.element.hasClass('disabled')) {
+        me.date.setMonth(me.date.getMonth() - movement);
+      }
 
-		} else if (element.hasClass('today')) {
-			me.date = new Date();
+    } else if (element.hasClass('today')) {
+      me.date = new Date();
 
-		} else if (element.hasClass('reset')) {
-			me.reset();
-		}
+    } else if (element.hasClass('reset')) {
+      me.reset();
+    }
 
-		me.populate().refreshRange();
-	};
+    me.populate().refreshRange();
+  };
 
 	this.reset = function() {
-		me.fields['start'].val(me.fields['start'].defaultValue || '');
-		me.fields['end'].val(me.fields['end'].defaultValue || '');
+		me.fields.start.val(me.fields.start.defaultValue || '');
+		me.fields.end.val(me.fields.end.defaultValue || '');
 		me.date = new Date(me.initDate);
-		me.parseField('start').refreshField('start').parseField('end').refreshField('end');
+		me.parseField(startFieldId).refreshField(startFieldId).parseField(endFieldId).refreshField(endFieldId);
 	};
 
 	this.clear = function() {
@@ -411,37 +447,40 @@ function Timeframe() {
 	};
 
 	this.handleDateClick = function(element, couldClear) {
+
 		me.mousedown = me.dragging = true;
 		if (me.stuck) {
+			// SELECTION MADE
+			me.cbkRangeSelected(me.range);
 			me.stuck = false;
 			return;
-
 		} else if (couldClear) {
-			if (!element.hasClass('startrange')) return;
-
-		} else if (me.maxRange != 1) {
-			me.stuck = true;
-			setTimeout(function() { if (me.mousedown) me.stuck = false; }, 200);
+      if (!element.hasClass('startrange')) { return; }
+		} else if (me.maxRange !== 1) {
+     	me.stuck = true;
+			setTimeout(function() {
+        if (me.mousedown) { me.stuck = false; }
+      }, 200);
 		}
 
 		me.getPoint(element[0].date);
 	};
 
 	this.getPoint = function(date) {
-		if (me.range['start'] && me.range['start'].toString() == date && me.range['end']){
-			me.startdrag = me.range['end'];
+    if (me.range.start && me.range.start.toString() === date && me.range.end){
+			me.startdrag = me.range.end;
 
 		} else {
 			me.clearButton.hide();
 
-			if (me.range['end'] && me.range['end'].toString() == date){
-				me.startdrag = me.range['start'];
+			if (me.range.end && me.range.end.toString() === date){
+				me.startdrag = me.range.start;
 			} else {
-				me.startdrag = me.range['start'] = me.range['end'] = date;
+				me.startdrag = me.range.start = me.range.end = date;
 			}
 		}
 
-		me.validateRange(me.range['start'], me.range['end']);
+		me.validateRange(me.range.start, me.range.end);
 		me.refreshRange();
 	};
 
@@ -458,17 +497,17 @@ function Timeframe() {
 			if (el.length) {
 				window.clearInterval(me.timer);
 
-				if (el.attr('id') == me.lastDayId) {
+				if (el.attr('id') === me.lastDayId) {
 					me.timer = window.setInterval(function() {
-						if (!me.buttons['next']['element'].hasClass('disabled')) {
+						if (!me.buttons.next.element.hasClass('disabled')) {
 							me.date.setMonth(me.date.getMonth() + 1);
 							me.populate().refreshRange();
 						}
 					}, me.scrollerDelay * 1000);
 
-				} else if (el.attr('id') == me.firstDayId) {
+				} else if (el.attr('id') === me.firstDayId) {
 					me.timer = window.setInterval(function() {
-						if (!me.buttons['previous']['element'].hasClass('disabled')) {
+						if (!me.buttons.previous.element.hasClass('disabled')) {
 							me.date.setMonth(me.date.getMonth() - 1);
 							me.populate().refreshRange();
 						}
@@ -483,19 +522,20 @@ function Timeframe() {
 		}
 	};
 
-	this.clearTimer = function(event) {
+  this.clearTimer = function() {
 		window.clearInterval(me.timer);
 		return me;
 	};
 
 	this.toggleClearButton = function(event) {
+
 		var el;
 
 		if (/*event.element().ancestors && */$(event.target).closest('td.selected').length) {
 			el = me.element.find('#' + me.calendars[0].attr('id') +  ' .pre.selected').first();
-			if (!el.length) el = me.element.find('.active.selected').first();
-			if (!el.length) el = me.element.find('.post.selected').first();
-			if (el.length) el.prepend(me.clearButton);
+			if (!el.length) { el = me.element.find('.active.selected').first(); }
+			if (!el.length) { el = me.element.find('.post.selected').first(); }
+			if (el.length) { el.prepend(me.clearButton); }
 			me.clearButton.show().find('span').first().removeClass('active');
 
 		} else {
@@ -523,12 +563,15 @@ function Timeframe() {
 	};
 
 	this.validateRange = function(start, end) {
+		// ESL set attrs name to range
+
 		var days = parseInt((end - start) / 86400000);
+	    var range;
 
 		if (me.maxRange) {
-			var range = me.maxRange - 1;
+			range = me.maxRange - 1;
 			if (days > range) {
-				if (start == me.startdrag) {
+				if (start === me.startdrag) {
 					end = new Date(me.startdrag);
 					end.setDate(end.getDate() + range);
 				} else {
@@ -539,10 +582,10 @@ function Timeframe() {
 		}
 
 		if (me.minRange) {
-			var range = me.minRange - 1;
+			range = me.minRange - 1;
 			var flag = true;
 			if (days <= range) {
-				if (start != me.startdrag) {
+				if (start !== me.startdrag) {
 					start = new Date(me.startdrag);
 					start.setDate(start.getDate() - range);
 					flag = start < me.earliest;
@@ -555,23 +598,23 @@ function Timeframe() {
 			}
 		}
 
-		me.range['start'] = start;
-		me.range['end'] = end;
+		me.range.start = start;
+		me.range.end = end;
 	};
 
 	this.eventMouseUp = function(event) {
-		if (!me.dragging) return;
+
+		if (!me.dragging) { return; }
 
 		if (!me.stuck) {
-			me.dragging = false;
+      me.dragging = false;
 			if (me.timer) {
 				clearInterval(me.timer);
 			}
-
 			if ($(event.target).closest('span.clear span.active').length) {
-				me.clearRange();
+       	me.clearRange();
 			} else if ('onFinished' in me.options) {
-				me.options['onFinished']();
+       	me.options.onFinished();
 			}
 		}
 		me.mousedown = false;
@@ -580,19 +623,23 @@ function Timeframe() {
 
 	this.clearRange = function() {
 		me.clearButton.hide().find('span').first().removeClass('active');
-		me.range['start'] = me.range['end'] = null;
-		me.refreshField('start').refreshField('end');
+		me.range.start = me.range.end = null;
+		me.refreshField(startFieldId).refreshField(endFieldId);
 		if ('onClear' in me.options) {
-			me.options['onClear']();
+			me.options.onClear();
 		}
 	};
 
 	this.refreshRange = function() {
+
 		$.each(me.element.find('td'), function(i, day) {
 			var $day = $(day);
 			$day.attr('class', $day.attr('baseClass'));
 
-			if (me.range['start'] && me.range['end'] && me.range['start'] <= day.date && day.date <= me.range['end']) {
+			var rangeStart = moment(me.range.start)
+			var rangeEnd = moment(me.range.end)
+
+			if (rangeStart && rangeEnd && !(rangeStart.isAfter(day.date,'day')) && !(rangeEnd.isBefore(day.date,'day'))) {
 				var baseClass = $day.hasClass('beyond') ? 'beyond_' : $day.hasClass('today') ? 'today_' : null;
 				var state = me.stuck || me.mousedown ? 'stuck' : 'selected';
 
@@ -602,11 +649,12 @@ function Timeframe() {
 				$day.addClass(state);
 
 				var rangeClass = '';
-				if (me.range['start'].toString() == day.date) {
+
+				if (moment(me.range.start).isSame(day.date, 'day')){
 					rangeClass += 'start';
 				}
 
-				if (me.range['end'].toString() == day.date) {
+				if (moment(me.range.end).isSame(day.date, 'day')){
 					rangeClass += 'end';
 				}
 
@@ -614,24 +662,18 @@ function Timeframe() {
 					$day.addClass(rangeClass + 'range');
 				}
 			}
-			/*
-			 if (Prototype.Browser.Opera) {
-			 day.unselectable = 'on'; // Trick Opera into refreshing the selection (FIXME)
-			 day.unselectable = null;
-			 }
-			 */
 		});
 
 		if (me.dragging) {
-			me.refreshField('start').refreshField('end');
+			me.refreshField(startFieldId).refreshField(endFieldId);
 		}
 	};
 
 	this.setRange = function(start, end) { // TODO
-		var range = { start: start, end: end };
+		var range = { start: moment(start), end: moment(end) };
 
 		$.each(range, function(key, value) {
-			me.range[key] = Date.parseToObject(value);
+			me.range[key] = value;
 			me.refreshField(key);
 			me.parseField(key, true);
 		});
@@ -654,7 +696,7 @@ $.extend(Date, {
 			return null;
 		}
 		date = new Date(date);
-		return (date == 'Invalid Date' || date == 'NaN') ? null : date.neutral();
+		return (date === 'Invalid Date' || date === 'NaN') ? null : date.neutral();
 	}
 });
 
@@ -664,28 +706,45 @@ $.extend(Date.prototype, {
 		var me = this;
 		var day = me.getDay(), month = me.getMonth();
 		var hours = me.getHours(), minutes = me.getMinutes();
-		function pad(num) { return num < 10 ? '0'+num : ''+num; };
+		function pad(num) { return num < 10 ? '0'+num : ''+num; }
 
 		return format.replace(/\%([aAbBcdHImMpsSwyY])/g, function(part) {
-			switch(part[1]) {
-				case 'a': return Locale['dayNames'][day].substring(0, 3); break;
-				case 'A': return Locale['dayNames'][day]; break;
-				case 'b': return Locale['monthNames'][month].substring(0, 3); break;
-				case 'B': return Locale['monthNames'][month]; break;
-				case 'c': return me.toString(); break;
-				case 'd': return pad(me.getDate()); break;
-				case 'H': return pad(hours); break;
-				case 'I': return (hours % 12 == 0) ? 12 : pad(hours % 12); break;
-				case 'm': return pad(month + 1); break;
-				case 'M': return pad(minutes); break;
-				case 'p': return hours >= 12 ? 'PM' : 'AM'; break;
-				case 's': return me.getTime()/1000;
-				case 'S': return pad(me.getSeconds()); break;
-				case 'w': return day; break;
-				case 'y': return pad(me.getFullYear() % 100); break;
-				case 'Y': return me.getFullYear().toString(); break;
-			}
-		});
+      switch (part[1]) {
+        case 'a':
+          return Locale.dayNames[day].substring(0, 3);
+        case 'A':
+          return Locale.dayNames[day];
+        case 'b':
+          return Locale.monthNames[month].substring(0, 3);
+        case 'B':
+          return Locale.monthNames[month];
+        case 'c':
+          return me.toString();
+        case 'd':
+          return pad(me.getDate());
+        case 'H':
+          return pad(hours);
+        case 'I':
+          return (hours % 12 === 0) ? 12 : pad(hours % 12);
+        case 'm':
+          return pad(month + 1);
+        case 'M':
+          return pad(minutes);
+        case 'p':
+          return hours >= 12 ? 'PM' : 'AM';
+        case 's':
+          return me.getTime() / 1000;
+        case 'S':
+          return pad(me.getSeconds());
+        case 'w':
+          return day;
+        case 'y':
+          return pad(me.getFullYear() % 100);
+        case 'Y':
+          return me.getFullYear().toString();
+      }
+    });
+
 	},
 
 	neutral: function() {
