@@ -1,7 +1,7 @@
 {
   "name": "timeframe",
   "main": "timeframe.js",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "homepage": "https://github.com/larktravel/timeframe",
   "authors": [
     "Adam Singer <adam@artforge.com>"
